@@ -30,8 +30,6 @@ import type {
   QuestionRequest,
 } from '../types/chat';
 
-const WELCOME_ID = 'sys_welcome';
-
 export type SelectedImage = {
   uri: string;
   mime: string;
@@ -86,13 +84,7 @@ export function useAppController(): AppController {
   const [activeDirectory, setActiveDirectory] = useState('');
   const [input, setInput] = useState('');
   const [selectedImage, setSelectedImage] = useState<SelectedImage | null>(null);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: WELCOME_ID,
-      role: 'system',
-      content: translations.en.welcome,
-    },
-  ]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [pendingPermissions, setPendingPermissions] = useState<PermissionRequest[]>([]);
   const [pendingQuestions, setPendingQuestions] = useState<QuestionRequest[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -163,19 +155,6 @@ export function useAppController(): AppController {
       }
     })();
   }, []);
-
-  useEffect(() => {
-    setMessages((prev) =>
-      prev.map((item) =>
-        item.id === WELCOME_ID
-          ? {
-              ...item,
-              content: translations[locale].welcome,
-            }
-          : item,
-      ),
-    );
-  }, [locale]);
 
   useEffect(() => {
     return () => {
@@ -479,13 +458,7 @@ const traceAssistantStream = (
     setSessionId('');
     setInput('');
     setSelectedImage(null);
-    setMessages([
-      {
-        id: WELCOME_ID,
-        role: 'system',
-        content: translations[locale].welcome,
-      },
-    ]);
+    setMessages([]);
     currentAssistantIdRef.current = null;
     setPendingPermissions([]);
     setPendingQuestions([]);

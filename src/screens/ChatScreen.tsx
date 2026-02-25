@@ -333,6 +333,16 @@ export function ChatScreen({ controller, navigation }: Props) {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={0}
       >
+        <View style={styles.topBar}>
+          <Pressable onPress={() => navigation.goBack()} style={styles.topBarBackButton}>
+            <Text style={styles.topBarBackText}>←</Text>
+          </Pressable>
+          <Text style={styles.topBarTitle} numberOfLines={1}>
+            {activeEndpoint.name}
+          </Text>
+          <View style={styles.topBarSpacer} />
+        </View>
+
         <ScrollView ref={scrollRef} style={styles.list} contentContainerStyle={styles.listContent}>
           {messages.map((m) => (
             <View
@@ -580,6 +590,40 @@ const styles = StyleSheet.create({
   },
   wrap: {
     flex: 1,
+  },
+  topBar: {
+    height: 48,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dfd2bf',
+    backgroundColor: '#f7f1e7',
+    paddingHorizontal: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  topBarBackButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  topBarBackText: {
+    color: '#3a2d21',
+    fontSize: 20,
+    fontWeight: '700',
+    lineHeight: 22,
+  },
+  topBarTitle: {
+    flex: 1,
+    color: '#31261b',
+    fontSize: 16,
+    fontWeight: '700',
+    textAlign: 'center',
+    paddingHorizontal: 8,
+  },
+  topBarSpacer: {
+    width: 40,
+    height: 40,
   },
   list: {
     flex: 1,
