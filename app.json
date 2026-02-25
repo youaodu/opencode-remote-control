@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "OpenCode Mobile Chat",
+    "name": "OPcode",
     "slug": "opencode-mobile-chat",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -13,9 +13,15 @@
       "**/*"
     ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
     },
     "android": {
+      "usesCleartextTraffic": true,
       "adaptiveIcon": {
         "backgroundColor": "#f3efe7"
       }
