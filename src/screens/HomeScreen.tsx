@@ -75,12 +75,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3efe7',
   },
   topActions: {
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
-    paddingTop: 8,
-    paddingBottom: 4,
+    paddingTop: 0,
+    paddingBottom: 0,
   },
   spacer: {
     minWidth: 56,

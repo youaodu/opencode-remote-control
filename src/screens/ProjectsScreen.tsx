@@ -230,9 +230,11 @@ export function ProjectsScreen({ controller, navigation, route }: Props) {
 
       <View style={styles.headerRow}>
         <Pressable style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>{t('cancel')}</Text>
+          <Text style={styles.backButtonText}>←</Text>
         </Pressable>
-        <Text style={styles.title}>{endpoint?.name ?? t('projectListTitle')}</Text>
+        <Text style={styles.title} numberOfLines={1}>
+          {endpoint?.name ?? t('projectListTitle')}
+        </Text>
         <View style={styles.rightSpacer} />
       </View>
 
@@ -322,38 +324,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#f3efe7',
   },
   headerRow: {
+    height: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 12,
     paddingTop: 0,
-    paddingBottom: 10,
+    paddingBottom: 0,
     borderBottomWidth: 1,
     borderBottomColor: '#e3dacd',
     backgroundColor: '#f7f2ea',
   },
   backButton: {
-    minWidth: 56,
-    height: 30,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#c8b49c',
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#fff8ed',
   },
   backButtonText: {
-    color: '#3f3225',
-    fontSize: 12,
+    color: '#3a2d21',
+    fontSize: 20,
     fontWeight: '700',
+    lineHeight: 22,
   },
   title: {
+    flex: 1,
     fontSize: 16,
     fontWeight: '700',
     color: '#31271d',
+    textAlign: 'center',
+    paddingHorizontal: 8,
   },
   rightSpacer: {
-    minWidth: 56,
+    width: 40,
+    height: 40,
   },
   list: {
     flex: 1,
