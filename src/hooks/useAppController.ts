@@ -274,6 +274,35 @@ const decodeMaybeText = (value: unknown): string => {
   return decodePossiblyMojibakeText(value);
 };
 
+const stringifyForToolEvent = (value: unknown): string => {
+  if (typeof value === 'string') return decodePossiblyMojibakeText(value).trim();
+  if (value === null || value === undefined) return '';
+
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+};
+
+const toToolEventSnippet = (value: unknown, truncatedSuffix: string): string => {
+  const maxLength = 1200;
+  const maxLines = 24;
+  const text = stringifyForToolEvent(value);
+  if (!text) return '';
+
+  const lines = text.split('\n');
+  const clippedByLines = lines.length > maxLines ? lines.slice(0, maxLines).join('\n') : text;
+  const clipped =
+    clippedByLines.length > maxLength ? clippedByLines.slice(0, maxLength).trimEnd() : clippedByLines;
+
+  if (clipped !== text) {
+    return `${clipped}\n${truncatedSuffix}`;
+  }
+
+  return clipped;
+};
+
 const pickQuestionPrompts = (value: unknown): QuestionPrompt[] => {
   if (!Array.isArray(value)) return [];
 
@@ -776,6 +805,7 @@ const traceAssistantStream = (
 
     let activeAssistantMessageId: string | null = null;
     let streamedAssistantText = '';
+    const toolMessageIdByUpdateKey = new Map<string, string>();
 
     const applyEvent = (payload: unknown) => {
       if (!payload || typeof payload !== 'object') return;
@@ -849,10 +879,81 @@ const traceAssistantStream = (
         if (!part) return;
 
         const partType = typeof part.type === 'string' ? part.type : '';
+        const partId = typeof part.id === 'string' ? part.id : '';
+        const callId = typeof part.callID === 'string' ? part.callID : '';
         const sessionOfPart = typeof part.sessionID === 'string' ? part.sessionID : '';
         const messageId = typeof part.messageID === 'string' ? part.messageID : '';
+        if (sessionOfPart !== activeSessionId) return;
+
+        if (partType === 'tool') {
+          const toolName = typeof part.tool === 'string' ? part.tool : '';
+          const state = part.state && typeof part.state === 'object' ? (part.state as Record<string, unknown>) : null;
+          const status = state && typeof state.status === 'string' ? state.status : '';
+
+          if (toolName === 'read') {
+            const inputObj =
+              state?.input && typeof state.input === 'object' ? (state.input as Record<string, unknown>) : null;
+            const filePath = inputObj && typeof inputObj.filePath === 'string' ? inputObj.filePath : '';
+            const readContent = filePath
+              ? `${t('toolReadRunning')}\n\n${t('toolReadPathLabel')}: \`${filePath}\``
+              : t('toolReadRunning');
+            if (!streamedAssistantText) {
+              updateAssistantContent(assistantId, readContent, true);
+            } else if (filePath) {
+              updateAssistantContent(assistantId, readContent, true);
+            }
+            return;
+          }
+
+          const inputSnippet = toToolEventSnippet(state?.input, t('toolEventTruncated'));
+          const outputSnippet = toToolEventSnippet(state?.output, t('toolEventTruncated'));
+
+          const lines = [`**${t('toolEventTitle')}**`];
+          if (toolName) {
+            lines.push(`${t('toolEventToolLabel')}: \`${toolName}\``);
+          }
+          if (status) {
+            lines.push(`${t('toolEventStatusLabel')}: \`${status}\``);
+          }
+          if (inputSnippet) {
+            lines.push(`${t('toolEventInputLabel')}:\n\n\`\`\`\n${inputSnippet.replace(/```/g, '` ` `')}\n\`\`\``);
+          }
+
+          const safeOutput = outputSnippet.replace(/```/g, '` ` `');
+          lines.push(
+            outputSnippet
+              ? `${t('toolEventOutputLabel')}:\n\n\`\`\`\n${safeOutput}\n\`\`\``
+              : `${t('toolEventOutputLabel')}: ${t('toolEventNoOutput')}`,
+          );
+
+          const content = lines.join('\n\n');
+          const updateKey = partId || callId || `${messageId}:${toolName}`;
+          const mappedMessageId = toolMessageIdByUpdateKey.get(updateKey);
+          if (mappedMessageId) {
+            setMessages((prev) =>
+              prev.map((item) =>
+                item.id === mappedMessageId
+                  ? {
+                      ...item,
+                      content,
+                    }
+                  : item,
+              ),
+            );
+          } else {
+            const toolMessageId = partId || makeId('tool');
+            appendMessage({
+              id: toolMessageId,
+              role: 'system',
+              content,
+            });
+            toolMessageIdByUpdateKey.set(updateKey, toolMessageId);
+          }
+          return;
+        }
+
         const text = typeof part.text === 'string' ? part.text : '';
-        if (partType !== 'text' || sessionOfPart !== activeSessionId || !text) return;
+        if (partType !== 'text' || !text) return;
 
         if (!activeAssistantMessageId && messageId) {
           activeAssistantMessageId = messageId;

@@ -80,6 +80,15 @@ export type I18nKey =
   | 'questionResolved'
   | 'questionRejected'
   | 'questionAnswerRequired'
+  | 'toolEventTitle'
+  | 'toolEventToolLabel'
+  | 'toolEventStatusLabel'
+  | 'toolEventInputLabel'
+  | 'toolEventOutputLabel'
+  | 'toolEventNoOutput'
+  | 'toolEventTruncated'
+  | 'toolReadRunning'
+  | 'toolReadPathLabel'
   | 'imageOnlyMessage'
   | 'imagePermissionDenied'
   | 'imageReadFailed';
@@ -165,6 +174,15 @@ export const translations: Record<Locale, Record<I18nKey, string>> = {
     questionResolved: 'Submitted answers to OpenCode question request.',
     questionRejected: 'Rejected OpenCode question request.',
     questionAnswerRequired: 'Please answer every question before submitting.',
+    toolEventTitle: 'Tool event',
+    toolEventToolLabel: 'Tool',
+    toolEventStatusLabel: 'Status',
+    toolEventInputLabel: 'Input',
+    toolEventOutputLabel: 'Output',
+    toolEventNoOutput: '(No output yet)',
+    toolEventTruncated: '(truncated)',
+    toolReadRunning: 'Reading...',
+    toolReadPathLabel: 'File',
     imageOnlyMessage: '[Image]',
     imagePermissionDenied: 'Photo library permission is required to pick images.',
     imageReadFailed: 'Failed to read selected image. Please try another one.',
@@ -249,6 +267,15 @@ export const translations: Record<Locale, Record<I18nKey, string>> = {
     questionResolved: '已提交问题答案。',
     questionRejected: '已拒绝问题请求。',
     questionAnswerRequired: '请先完成每个问题的选择或输入。',
+    toolEventTitle: '工具事件',
+    toolEventToolLabel: '工具',
+    toolEventStatusLabel: '状态',
+    toolEventInputLabel: '输入',
+    toolEventOutputLabel: '输出',
+    toolEventNoOutput: '（暂无输出）',
+    toolEventTruncated: '（已截断）',
+    toolReadRunning: '正在读取...',
+    toolReadPathLabel: '文件',
     imageOnlyMessage: '[图片]',
     imagePermissionDenied: '需要相册权限才能选择图片。',
     imageReadFailed: '读取所选图片失败，请换一张再试。',
