@@ -27,6 +27,8 @@ Default value:
 
 For real-device testing, use your computer's LAN IP (for example `http://192.168.50.64:4096`).
 
+For deployment or remote real-device access, you need a public **HTTPS** endpoint (domain/IP via intranet tunneling). Due to Android and iOS network security restrictions, plain `http://` endpoints are not supported.
+
 Before using the app, start OpenCode server:
 
 ```bash
