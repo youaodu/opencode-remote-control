@@ -30,7 +30,7 @@ For real-device testing, use your computer's LAN IP (for example `http://192.168
 Before using the app, start OpenCode server:
 
 ```bash
-opencode serve --hostname 127.0.0.1 --port 4096
+opencode serve --hostname 0.0.0.0 --port 4096
 ```
 
 ## Internationalization

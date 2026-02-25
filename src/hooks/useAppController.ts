@@ -20,7 +20,15 @@ import {
   pickAssistantTextFromMessages,
   pickSessionIdFromResponse,
 } from '../utils/chatApi';
-import type { ConnectionState, Endpoint, Message } from '../types/chat';
+import type {
+  ConnectionState,
+  Endpoint,
+  Message,
+  PermissionReply,
+  PermissionRequest,
+  QuestionPrompt,
+  QuestionRequest,
+} from '../types/chat';
 
 const WELCOME_ID = 'sys_welcome';
 
@@ -41,6 +49,8 @@ export type AppController = {
   input: string;
   selectedImage: SelectedImage | null;
   messages: Message[];
+  pendingPermissions: PermissionRequest[];
+  pendingQuestions: QuestionRequest[];
   isStreaming: boolean;
   statusText: string;
   canSend: boolean;
@@ -59,6 +69,9 @@ export type AppController = {
   leaveEndpoint: () => void;
   sendMessage: () => void;
   stopStreaming: () => Promise<void>;
+  replyPermissionRequest: (requestId: string, reply: PermissionReply, message?: string) => Promise<boolean>;
+  replyQuestionRequest: (requestId: string, answers: string[][]) => Promise<boolean>;
+  rejectQuestionRequest: (requestId: string) => Promise<boolean>;
   openAddEndpointModal: () => void;
   openEditEndpointModal: (endpoint: Endpoint) => void;
   closeEndpointModal: () => void;
@@ -80,6 +93,8 @@ export function useAppController(): AppController {
       content: translations.en.welcome,
     },
   ]);
+  const [pendingPermissions, setPendingPermissions] = useState<PermissionRequest[]>([]);
+  const [pendingQuestions, setPendingQuestions] = useState<QuestionRequest[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [connection, setConnection] = useState<ConnectionState>('idle');
 
@@ -193,6 +208,8 @@ type SessionStreamEventType =
   | 'message.updated'
   | 'message.part.delta'
   | 'message.part.updated'
+  | 'permission.asked'
+  | 'question.asked'
   | 'done';
 
 type ApiTraceTag =
@@ -201,6 +218,9 @@ type ApiTraceTag =
   | 'prompt-async'
   | 'session-status'
   | 'event-stream'
+  | 'permission-reply'
+  | 'question-reply'
+  | 'question-reject'
   | 'session-message'
   | 'session-abort'
   | 'gateway-health';
@@ -211,6 +231,9 @@ const API_TIMEOUT_MS: Record<ApiTraceTag, number> = {
   'prompt-async': 15000,
   'session-status': 8000,
   'event-stream': 12000,
+  'permission-reply': 12000,
+  'question-reply': 12000,
+  'question-reject': 12000,
   'session-message': 12000,
   'session-abort': 8000,
   'gateway-health': 8000,
@@ -239,6 +262,52 @@ const decodePossiblyMojibakeText = (text: string): string => {
   } catch {
     return text;
   }
+};
+
+const pickStringArray = (value: unknown): string[] => {
+  if (!Array.isArray(value)) return [];
+  return value.filter((item): item is string => typeof item === 'string' && !!item);
+};
+
+const decodeMaybeText = (value: unknown): string => {
+  if (typeof value !== 'string') return '';
+  return decodePossiblyMojibakeText(value);
+};
+
+const pickQuestionPrompts = (value: unknown): QuestionPrompt[] => {
+  if (!Array.isArray(value)) return [];
+
+  const prompts: QuestionPrompt[] = [];
+  value.forEach((item) => {
+    if (!item || typeof item !== 'object') return;
+    const obj = item as Record<string, unknown>;
+    const optionsRaw = Array.isArray(obj.options) ? obj.options : [];
+    const options = optionsRaw
+      .map((option) => {
+        if (!option || typeof option !== 'object') return null;
+        const optionObj = option as Record<string, unknown>;
+        const label = decodeMaybeText(optionObj.label);
+        if (!label) return null;
+        return {
+          label,
+          description: decodeMaybeText(optionObj.description),
+        };
+      })
+      .filter((option): option is { label: string; description: string } => !!option);
+
+    const question = decodeMaybeText(obj.question);
+    if (!question) return;
+
+    prompts.push({
+      header: decodeMaybeText(obj.header),
+      question,
+      multiple: obj.multiple === true,
+      customEnabled: obj.custom !== false,
+      options,
+    });
+  });
+
+  return prompts;
 };
 
 const traceAssistantStream = (
@@ -389,6 +458,8 @@ const traceAssistantStream = (
       },
     ]);
     currentAssistantIdRef.current = null;
+    setPendingPermissions([]);
+    setPendingQuestions([]);
     setIsStreaming(false);
     setConnection('idle');
   };
@@ -416,6 +487,8 @@ const traceAssistantStream = (
     setActiveDirectory('');
     setSelectedImage(null);
     currentAssistantIdRef.current = null;
+    setPendingPermissions([]);
+    setPendingQuestions([]);
     setIsStreaming(false);
     setConnection('idle');
     void AsyncStorage.removeItem(ACTIVE_ENDPOINT_KEY);
@@ -633,6 +706,14 @@ const traceAssistantStream = (
         applyPayload(event.data);
       };
 
+      const handlePermissionAsked: EventSourceListener<SessionStreamEventType, 'permission.asked'> = (event) => {
+        applyPayload(event.data);
+      };
+
+      const handleQuestionAsked: EventSourceListener<SessionStreamEventType, 'question.asked'> = (event) => {
+        applyPayload(event.data);
+      };
+
       const handleError: EventSourceListener<SessionStreamEventType, 'error'> = (event) => {
         if (signal.aborted) return;
         const message = 'message' in event && event.message ? ` message=${event.message}` : '';
@@ -649,6 +730,8 @@ const traceAssistantStream = (
       eventSource.addEventListener('message.updated', handleMessageUpdated);
       eventSource.addEventListener('message.part.delta', handleMessagePartDelta);
       eventSource.addEventListener('message.part.updated', handleMessagePartUpdated);
+      eventSource.addEventListener('permission.asked', handlePermissionAsked);
+      eventSource.addEventListener('question.asked', handleQuestionAsked);
       eventSource.addEventListener('error', handleError);
       eventSource.addEventListener('done', handleDone);
       eventSource.addEventListener('close', () => {
@@ -787,6 +870,88 @@ const traceAssistantStream = (
           streamedAssistantText,
         );
         updateAssistantContent(assistantId, streamedAssistantText, true);
+        return;
+      }
+
+      if (eventType === 'permission.asked') {
+        const requestId = typeof properties.id === 'string' ? properties.id : '';
+        const sessionOfPermission = typeof properties.sessionID === 'string' ? properties.sessionID : '';
+        if (!requestId || sessionOfPermission !== activeSessionId) return;
+
+        const metadata =
+          properties.metadata && typeof properties.metadata === 'object'
+            ? (properties.metadata as Record<string, unknown>)
+            : null;
+        const tool =
+          properties.tool && typeof properties.tool === 'object'
+            ? (properties.tool as Record<string, unknown>)
+            : null;
+
+        const permissionRequest: PermissionRequest = {
+          id: requestId,
+          sessionId: sessionOfPermission,
+          permission: typeof properties.permission === 'string' ? properties.permission : '',
+          patterns: pickStringArray(properties.patterns),
+          always: pickStringArray(properties.always),
+          filepath: metadata && typeof metadata.filepath === 'string' ? metadata.filepath : '',
+          parentDir: metadata && typeof metadata.parentDir === 'string' ? metadata.parentDir : '',
+          messageId: tool && typeof tool.messageID === 'string' ? tool.messageID : '',
+          callId: tool && typeof tool.callID === 'string' ? tool.callID : '',
+          status: 'pending',
+          error: '',
+          createdAt: Date.now(),
+        };
+
+        setPendingPermissions((prev) => {
+          const existingIndex = prev.findIndex((item) => item.id === requestId);
+          if (existingIndex < 0) {
+            return [...prev, permissionRequest];
+          }
+
+          return prev.map((item, index) => {
+            if (index !== existingIndex) return item;
+            return {
+              ...item,
+              ...permissionRequest,
+              createdAt: item.createdAt,
+            };
+          });
+        });
+        return;
+      }
+
+      if (eventType === 'question.asked') {
+        const requestId = typeof properties.id === 'string' ? properties.id : '';
+        const sessionOfQuestion = typeof properties.sessionID === 'string' ? properties.sessionID : '';
+        if (!requestId || sessionOfQuestion !== activeSessionId) return;
+
+        const prompts = pickQuestionPrompts(properties.questions);
+        if (!prompts.length) return;
+
+        const request: QuestionRequest = {
+          id: requestId,
+          sessionId: sessionOfQuestion,
+          questions: prompts,
+          status: 'pending',
+          error: '',
+          createdAt: Date.now(),
+        };
+
+        setPendingQuestions((prev) => {
+          const existingIndex = prev.findIndex((item) => item.id === requestId);
+          if (existingIndex < 0) {
+            return [...prev, request];
+          }
+
+          return prev.map((item, index) => {
+            if (index !== existingIndex) return item;
+            return {
+              ...item,
+              ...request,
+              createdAt: item.createdAt,
+            };
+          });
+        });
       }
     };
 
@@ -862,6 +1027,164 @@ const traceAssistantStream = (
     }
 
     return '';
+  };
+
+  const replyPermissionRequest = async (
+    requestId: string,
+    reply: PermissionReply,
+    message?: string,
+  ): Promise<boolean> => {
+    if (!gatewayBaseUrl) return false;
+
+    setPendingPermissions((prev) =>
+      prev.map((item) =>
+        item.id === requestId
+          ? {
+              ...item,
+              status: 'submitting',
+              error: '',
+            }
+          : item,
+      ),
+    );
+
+    const body: Record<string, string> = {
+      reply,
+    };
+    const trimmedMessage = message?.trim() ?? '';
+    if (reply === 'reject' && trimmedMessage) {
+      body.message = trimmedMessage;
+    }
+
+    try {
+      const response = await fetchWithTrace(
+        'permission-reply',
+        buildApiUrl(gatewayBaseUrl, `/permission/${requestId}/reply`, { directory: activeDirectory }),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(body),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error('permission-reply-failed');
+      }
+
+      setPendingPermissions((prev) => prev.filter((item) => item.id !== requestId));
+      return true;
+    } catch {
+      setPendingPermissions((prev) =>
+        prev.map((item) =>
+          item.id === requestId
+            ? {
+                ...item,
+                status: 'error',
+                error: t('permissionReplyFailed'),
+              }
+            : item,
+        ),
+      );
+      return false;
+    }
+  };
+
+  const replyQuestionRequest = async (requestId: string, answers: string[][]): Promise<boolean> => {
+    if (!gatewayBaseUrl) return false;
+
+    setPendingQuestions((prev) =>
+      prev.map((item) =>
+        item.id === requestId
+          ? {
+              ...item,
+              status: 'submitting',
+              error: '',
+            }
+          : item,
+      ),
+    );
+
+    try {
+      const response = await fetchWithTrace(
+        'question-reply',
+        buildApiUrl(gatewayBaseUrl, `/question/${requestId}/reply`, { directory: activeDirectory }),
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ answers }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error('question-reply-failed');
+      }
+
+      setPendingQuestions((prev) => prev.filter((item) => item.id !== requestId));
+      return true;
+    } catch {
+      setPendingQuestions((prev) =>
+        prev.map((item) =>
+          item.id === requestId
+            ? {
+                ...item,
+                status: 'error',
+                error: t('questionReplyFailed'),
+              }
+            : item,
+        ),
+      );
+      return false;
+    }
+  };
+
+  const rejectQuestionRequest = async (requestId: string): Promise<boolean> => {
+    if (!gatewayBaseUrl) return false;
+
+    setPendingQuestions((prev) =>
+      prev.map((item) =>
+        item.id === requestId
+          ? {
+              ...item,
+              status: 'submitting',
+              error: '',
+            }
+          : item,
+      ),
+    );
+
+    try {
+      const response = await fetchWithTrace(
+        'question-reject',
+        buildApiUrl(gatewayBaseUrl, `/question/${requestId}/reject`, { directory: activeDirectory }),
+        {
+          method: 'POST',
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error('question-reject-failed');
+      }
+
+      setPendingQuestions((prev) => prev.filter((item) => item.id !== requestId));
+      return true;
+    } catch {
+      setPendingQuestions((prev) =>
+        prev.map((item) =>
+          item.id === requestId
+            ? {
+                ...item,
+                status: 'error',
+                error: t('questionRejectFailed'),
+              }
+            : item,
+        ),
+      );
+      return false;
+    }
   };
 
   const stopStreaming = async () => {
@@ -1112,6 +1435,8 @@ const traceAssistantStream = (
     input,
     selectedImage,
     messages,
+    pendingPermissions,
+    pendingQuestions,
     isStreaming,
     statusText,
     canSend,
@@ -1130,6 +1455,9 @@ const traceAssistantStream = (
     leaveEndpoint,
     sendMessage,
     stopStreaming,
+    replyPermissionRequest,
+    replyQuestionRequest,
+    rejectQuestionRequest,
     openAddEndpointModal,
     openEditEndpointModal,
     closeEndpointModal,

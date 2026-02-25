@@ -56,6 +56,30 @@ export type I18nKey =
   | 'projectLoadMore'
   | 'projectLoadingMore'
   | 'projectNoMore'
+  | 'permissionTitle'
+  | 'permissionHint'
+  | 'permissionTypeLabel'
+  | 'permissionPathLabel'
+  | 'permissionPatternLabel'
+  | 'permissionAllowOnce'
+  | 'permissionAllowAlways'
+  | 'permissionReject'
+  | 'permissionRejectReasonPlaceholder'
+  | 'permissionConfirmReject'
+  | 'permissionCancelReject'
+  | 'permissionReplyFailed'
+  | 'permissionResolvedOnce'
+  | 'permissionResolvedAlways'
+  | 'permissionResolvedReject'
+  | 'questionTitle'
+  | 'questionSubmit'
+  | 'questionReject'
+  | 'questionCustomPlaceholder'
+  | 'questionReplyFailed'
+  | 'questionRejectFailed'
+  | 'questionResolved'
+  | 'questionRejected'
+  | 'questionAnswerRequired'
   | 'imageOnlyMessage'
   | 'imagePermissionDenied'
   | 'imageReadFailed';
@@ -117,6 +141,30 @@ export const translations: Record<Locale, Record<I18nKey, string>> = {
     projectLoadMore: 'Load more',
     projectLoadingMore: 'Loading more projects...',
     projectNoMore: 'No more projects.',
+    permissionTitle: 'Permission request',
+    permissionHint: 'OpenCode requests access outside the project.',
+    permissionTypeLabel: 'Type',
+    permissionPathLabel: 'Path',
+    permissionPatternLabel: 'Patterns',
+    permissionAllowOnce: 'Allow once',
+    permissionAllowAlways: 'Always allow',
+    permissionReject: 'Reject',
+    permissionRejectReasonPlaceholder: 'Reason (optional)',
+    permissionConfirmReject: 'Confirm reject',
+    permissionCancelReject: 'Cancel',
+    permissionReplyFailed: 'Failed to submit permission reply. Please retry.',
+    permissionResolvedOnce: 'Allowed this permission request once.',
+    permissionResolvedAlways: 'Always allowed this permission pattern for this instance.',
+    permissionResolvedReject: 'Rejected this permission request.',
+    questionTitle: 'Question from OpenCode',
+    questionSubmit: 'Submit answer',
+    questionReject: 'Reject request',
+    questionCustomPlaceholder: 'Type a custom answer',
+    questionReplyFailed: 'Failed to submit answer. Please retry.',
+    questionRejectFailed: 'Failed to reject question request. Please retry.',
+    questionResolved: 'Submitted answers to OpenCode question request.',
+    questionRejected: 'Rejected OpenCode question request.',
+    questionAnswerRequired: 'Please answer every question before submitting.',
     imageOnlyMessage: '[Image]',
     imagePermissionDenied: 'Photo library permission is required to pick images.',
     imageReadFailed: 'Failed to read selected image. Please try another one.',
@@ -177,6 +225,30 @@ export const translations: Record<Locale, Record<I18nKey, string>> = {
     projectLoadMore: '加载更多',
     projectLoadingMore: '正在加载更多项目...',
     projectNoMore: '没有更多项目了。',
+    permissionTitle: '权限请求',
+    permissionHint: 'OpenCode 请求访问项目外目录。',
+    permissionTypeLabel: '类型',
+    permissionPathLabel: '路径',
+    permissionPatternLabel: '匹配模式',
+    permissionAllowOnce: '允许一次',
+    permissionAllowAlways: '长期允许',
+    permissionReject: '拒绝',
+    permissionRejectReasonPlaceholder: '拒绝原因（可选）',
+    permissionConfirmReject: '确认拒绝',
+    permissionCancelReject: '取消',
+    permissionReplyFailed: '提交权限处理失败，请重试。',
+    permissionResolvedOnce: '已允许本次权限请求。',
+    permissionResolvedAlways: '已在当前实例中长期允许该权限模式。',
+    permissionResolvedReject: '已拒绝该权限请求。',
+    questionTitle: 'OpenCode 问题确认',
+    questionSubmit: '提交答案',
+    questionReject: '拒绝请求',
+    questionCustomPlaceholder: '输入自定义答案',
+    questionReplyFailed: '提交答案失败，请重试。',
+    questionRejectFailed: '拒绝问题请求失败，请重试。',
+    questionResolved: '已提交问题答案。',
+    questionRejected: '已拒绝问题请求。',
+    questionAnswerRequired: '请先完成每个问题的选择或输入。',
     imageOnlyMessage: '[图片]',
     imagePermissionDenied: '需要相册权限才能选择图片。',
     imageReadFailed: '读取所选图片失败，请换一张再试。',

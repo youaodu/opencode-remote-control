@@ -1,7 +1,7 @@
 import { StatusBar } from 'expo-status-bar';
 import type { StackScreenProps } from '@react-navigation/stack';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import Markdown from 'react-native-markdown-display';
 import {
   Alert,
@@ -123,17 +123,160 @@ export function ChatScreen({ controller, navigation }: Props) {
     selectedImage,
     setSelectedImage,
     messages,
+    pendingPermissions,
+    pendingQuestions,
     canSend,
     isStreaming,
     sendMessage,
     stopStreaming,
+    replyPermissionRequest,
+    replyQuestionRequest,
+    rejectQuestionRequest,
     t,
   } = controller;
   const scrollRef = useRef<ScrollView>(null);
+  const [rejectingPermissionId, setRejectingPermissionId] = useState<string | null>(null);
+  const [rejectMessage, setRejectMessage] = useState('');
+  const [questionSelections, setQuestionSelections] = useState<Record<string, string[][]>>({});
+  const [questionCustomValues, setQuestionCustomValues] = useState<Record<string, Record<number, string>>>({});
 
   useEffect(() => {
     scrollRef.current?.scrollToEnd({ animated: true });
   }, [messages]);
+
+  useEffect(() => {
+    if (!rejectingPermissionId) return;
+    if (pendingPermissions.some((item) => item.id === rejectingPermissionId)) return;
+    setRejectingPermissionId(null);
+    setRejectMessage('');
+  }, [pendingPermissions, rejectingPermissionId]);
+
+  useEffect(() => {
+    const activeIds = new Set(pendingQuestions.map((item) => item.id));
+
+    setQuestionSelections((prev) => {
+      const next: Record<string, string[][]> = {};
+      Object.entries(prev).forEach(([requestId, answers]) => {
+        if (activeIds.has(requestId)) {
+          next[requestId] = answers;
+        }
+      });
+      return next;
+    });
+
+    setQuestionCustomValues((prev) => {
+      const next: Record<string, Record<number, string>> = {};
+      Object.entries(prev).forEach(([requestId, values]) => {
+        if (activeIds.has(requestId)) {
+          next[requestId] = values;
+        }
+      });
+      return next;
+    });
+  }, [pendingQuestions]);
+
+  const visiblePermissions = [...pendingPermissions].sort((a, b) => a.createdAt - b.createdAt);
+  const visibleQuestions = [...pendingQuestions].sort((a, b) => a.createdAt - b.createdAt);
+
+  const handlePermissionReply = async (requestId: string, reply: 'once' | 'always' | 'reject') => {
+    const ok = await replyPermissionRequest(requestId, reply, reply === 'reject' ? rejectMessage : undefined);
+    if (!ok) return;
+
+    if (rejectingPermissionId === requestId) {
+      setRejectingPermissionId(null);
+      setRejectMessage('');
+    }
+  };
+
+  const updateQuestionChoice = (
+    requestId: string,
+    questionIndex: number,
+    label: string,
+    multiple: boolean,
+  ) => {
+    setQuestionSelections((prev) => {
+      const nextAnswers = [...(prev[requestId] ?? [])];
+      const current = nextAnswers[questionIndex] ?? [];
+
+      if (multiple) {
+        nextAnswers[questionIndex] = current.includes(label)
+          ? current.filter((item) => item !== label)
+          : [...current, label];
+      } else {
+        nextAnswers[questionIndex] = [label];
+      }
+
+      return {
+        ...prev,
+        [requestId]: nextAnswers,
+      };
+    });
+
+    setQuestionCustomValues((prev) => {
+      const currentByQuestion = prev[requestId] ?? {};
+      if (!currentByQuestion[questionIndex]) return prev;
+
+      return {
+        ...prev,
+        [requestId]: {
+          ...currentByQuestion,
+          [questionIndex]: '',
+        },
+      };
+    });
+  };
+
+  const updateQuestionCustom = (requestId: string, questionIndex: number, value: string) => {
+    setQuestionCustomValues((prev) => ({
+      ...prev,
+      [requestId]: {
+        ...(prev[requestId] ?? {}),
+        [questionIndex]: value,
+      },
+    }));
+  };
+
+  const submitQuestionAnswers = async (requestId: string) => {
+    const request = visibleQuestions.find((item) => item.id === requestId);
+    if (!request) return;
+
+    const selected = questionSelections[requestId] ?? [];
+    const customValues = questionCustomValues[requestId] ?? {};
+
+    const answers: string[][] = request.questions.map((question, index) => {
+      const custom = customValues[index]?.trim() ?? '';
+      if (question.customEnabled && custom) {
+        return [custom];
+      }
+
+      const picked = selected[index] ?? [];
+      return picked.filter((item) => !!item);
+    });
+
+    const hasEmptyAnswer = answers.some((item) => item.length === 0);
+    if (hasEmptyAnswer) {
+      Alert.alert(t('questionAnswerRequired'));
+      return;
+    }
+
+    const ok = await replyQuestionRequest(requestId, answers);
+    if (!ok) return;
+
+    setQuestionSelections((prev) => {
+      const next = { ...prev };
+      delete next[requestId];
+      return next;
+    });
+    setQuestionCustomValues((prev) => {
+      const next = { ...prev };
+      delete next[requestId];
+      return next;
+    });
+  };
+
+  const rejectQuestion = async (requestId: string) => {
+    await rejectQuestionRequest(requestId);
+  };
 
   const handlePickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -209,6 +352,182 @@ export function ChatScreen({ controller, navigation }: Props) {
             </View>
           ))}
         </ScrollView>
+
+        {visibleQuestions.length ? (
+          <View style={styles.questionSection}>
+            {visibleQuestions.map((request) => {
+              const isSubmitting = request.status === 'submitting';
+
+              return (
+                <View key={request.id} style={styles.questionCard}>
+                  <Text style={styles.questionTitle}>{t('questionTitle')}</Text>
+
+                  {request.questions.map((question, questionIndex) => {
+                    const selected = questionSelections[request.id]?.[questionIndex] ?? [];
+                    const customValue = questionCustomValues[request.id]?.[questionIndex] ?? '';
+
+                    return (
+                      <View key={`${request.id}_${questionIndex}`} style={styles.questionBlock}>
+                        {question.header ? <Text style={styles.questionHeader}>{question.header}</Text> : null}
+                        <Text style={styles.questionText}>{question.question}</Text>
+
+                        {question.options.map((option) => {
+                          const isSelected = selected.includes(option.label);
+                          return (
+                            <Pressable
+                              key={option.label}
+                              disabled={isSubmitting}
+                              onPress={() =>
+                                updateQuestionChoice(request.id, questionIndex, option.label, question.multiple)
+                              }
+                              style={[
+                                styles.questionOption,
+                                isSelected ? styles.questionOptionSelected : styles.questionOptionDefault,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.questionOptionLabel,
+                                  isSelected ? styles.questionOptionLabelSelected : null,
+                                ]}
+                              >
+                                {option.label}
+                              </Text>
+                              {option.description ? (
+                                <Text style={styles.questionOptionDescription}>{option.description}</Text>
+                              ) : null}
+                            </Pressable>
+                          );
+                        })}
+
+                        {question.customEnabled ? (
+                          <TextInput
+                            value={customValue}
+                            onChangeText={(value) => updateQuestionCustom(request.id, questionIndex, value)}
+                            placeholder={t('questionCustomPlaceholder')}
+                            placeholderTextColor="#7d7060"
+                            multiline
+                            editable={!isSubmitting}
+                            style={styles.questionCustomInput}
+                          />
+                        ) : null}
+                      </View>
+                    );
+                  })}
+
+                  {request.error ? <Text style={styles.questionError}>{request.error}</Text> : null}
+
+                  <View style={styles.questionActionsRow}>
+                    <Pressable
+                      onPress={() => void submitQuestionAnswers(request.id)}
+                      disabled={isSubmitting}
+                      style={[styles.questionActionButton, styles.questionActionSubmit]}
+                    >
+                      <Text style={styles.questionActionButtonText}>{t('questionSubmit')}</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => void rejectQuestion(request.id)}
+                      disabled={isSubmitting}
+                      style={[styles.questionActionButton, styles.questionActionReject]}
+                    >
+                      <Text style={styles.questionActionButtonText}>{t('questionReject')}</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {visiblePermissions.length ? (
+          <View style={styles.permissionSection}>
+            {visiblePermissions.map((request) => {
+              const isSubmitting = request.status === 'submitting';
+              const isRejecting = rejectingPermissionId === request.id;
+              const path = request.filepath || request.parentDir || '-';
+              const patterns = request.patterns.length ? request.patterns.join(', ') : '-';
+
+              return (
+                <View key={request.id} style={styles.permissionCard}>
+                  <Text style={styles.permissionTitle}>{t('permissionTitle')}</Text>
+                  <Text style={styles.permissionHint}>{t('permissionHint')}</Text>
+
+                  <Text style={styles.permissionMeta}>
+                    {t('permissionTypeLabel')}: {request.permission || '-'}
+                  </Text>
+                  <Text style={styles.permissionMeta}>
+                    {t('permissionPathLabel')}: {path}
+                  </Text>
+                  <Text style={styles.permissionMeta}>
+                    {t('permissionPatternLabel')}: {patterns}
+                  </Text>
+
+                  {request.error ? <Text style={styles.permissionError}>{request.error}</Text> : null}
+
+                  {isRejecting ? (
+                    <View style={styles.permissionRejectWrap}>
+                      <TextInput
+                        value={rejectMessage}
+                        onChangeText={setRejectMessage}
+                        placeholder={t('permissionRejectReasonPlaceholder')}
+                        placeholderTextColor="#7d7060"
+                        multiline
+                        style={styles.permissionRejectInput}
+                        editable={!isSubmitting}
+                      />
+                      <View style={styles.permissionActionsRow}>
+                        <Pressable
+                          onPress={() => {
+                            setRejectingPermissionId(null);
+                            setRejectMessage('');
+                          }}
+                          disabled={isSubmitting}
+                          style={[styles.permissionButton, styles.permissionButtonMuted]}
+                        >
+                          <Text style={styles.permissionButtonText}>{t('permissionCancelReject')}</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => void handlePermissionReply(request.id, 'reject')}
+                          disabled={isSubmitting}
+                          style={[styles.permissionButton, styles.permissionButtonDanger]}
+                        >
+                          <Text style={styles.permissionButtonText}>{t('permissionConfirmReject')}</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ) : (
+                    <View style={styles.permissionActionsRow}>
+                      <Pressable
+                        onPress={() => void handlePermissionReply(request.id, 'once')}
+                        disabled={isSubmitting}
+                        style={[styles.permissionButton, styles.permissionButtonPrimary]}
+                      >
+                        <Text style={styles.permissionButtonText}>{t('permissionAllowOnce')}</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => void handlePermissionReply(request.id, 'always')}
+                        disabled={isSubmitting}
+                        style={[styles.permissionButton, styles.permissionButtonSecondary]}
+                      >
+                        <Text style={styles.permissionButtonText}>{t('permissionAllowAlways')}</Text>
+                      </Pressable>
+                      <Pressable
+                        onPress={() => {
+                          setRejectingPermissionId(request.id);
+                          setRejectMessage('');
+                        }}
+                        disabled={isSubmitting}
+                        style={[styles.permissionButton, styles.permissionButtonDanger]}
+                      >
+                        <Text style={styles.permissionButtonText}>{t('permissionReject')}</Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
 
         {selectedImage ? (
           <View style={styles.previewWrap}>
@@ -337,6 +656,182 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     lineHeight: 12,
+  },
+  questionSection: {
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+  },
+  questionCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#cdbca0',
+    backgroundColor: '#fff9ef',
+    padding: 10,
+    gap: 8,
+  },
+  questionTitle: {
+    color: '#392b1f',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  questionBlock: {
+    gap: 6,
+  },
+  questionHeader: {
+    color: '#6b5641',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  questionText: {
+    color: '#352a20',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  questionOption: {
+    borderRadius: 10,
+    borderWidth: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 2,
+  },
+  questionOptionDefault: {
+    borderColor: '#d7c8b3',
+    backgroundColor: '#fffefb',
+  },
+  questionOptionSelected: {
+    borderColor: '#2b614c',
+    backgroundColor: '#e8f3ee',
+  },
+  questionOptionLabel: {
+    color: '#3a2d22',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  questionOptionLabelSelected: {
+    color: '#1f4a3a',
+  },
+  questionOptionDescription: {
+    color: '#6b5641',
+    fontSize: 11,
+    lineHeight: 15,
+  },
+  questionCustomInput: {
+    minHeight: 40,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#d4c5af',
+    backgroundColor: '#fffdf8',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: '#30251a',
+    fontSize: 13,
+  },
+  questionError: {
+    color: '#9b2f2f',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  questionActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  questionActionButton: {
+    flex: 1,
+    borderRadius: 8,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  questionActionSubmit: {
+    backgroundColor: '#2b614c',
+  },
+  questionActionReject: {
+    backgroundColor: '#8d5144',
+  },
+  questionActionButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  permissionSection: {
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingTop: 6,
+  },
+  permissionCard: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#d9c5a7',
+    backgroundColor: '#fff6e7',
+    padding: 10,
+    gap: 4,
+  },
+  permissionTitle: {
+    color: '#392b1f',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  permissionHint: {
+    color: '#6b5641',
+    fontSize: 12,
+    marginBottom: 4,
+  },
+  permissionMeta: {
+    color: '#4a3a2b',
+    fontSize: 12,
+  },
+  permissionError: {
+    marginTop: 4,
+    color: '#9b2f2f',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  permissionRejectWrap: {
+    marginTop: 6,
+    gap: 8,
+  },
+  permissionRejectInput: {
+    minHeight: 44,
+    maxHeight: 88,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#d4c5af',
+    backgroundColor: '#fffdf8',
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    color: '#30251a',
+    fontSize: 13,
+  },
+  permissionActionsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  permissionButton: {
+    flex: 1,
+    borderRadius: 8,
+    minHeight: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+  },
+  permissionButtonPrimary: {
+    backgroundColor: '#2b614c',
+  },
+  permissionButtonSecondary: {
+    backgroundColor: '#7c6a4f',
+  },
+  permissionButtonDanger: {
+    backgroundColor: '#9a4a3d',
+  },
+  permissionButtonMuted: {
+    backgroundColor: '#9f9c96',
+  },
+  permissionButtonText: {
+    color: '#ffffff',
+    fontSize: 12,
+    fontWeight: '700',
   },
   inputRow: {
     flexDirection: 'row',
