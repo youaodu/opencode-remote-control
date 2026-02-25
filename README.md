@@ -46,3 +46,8 @@ English is the default language.
 - Sends prompts with `POST /session/:sessionID/prompt_async` (with fallbacks)
 - Polls messages from `GET /session/:sessionID/message`
 - Verifies server with `GET /global/health` when saving Base URL
+
+## Notes
+
+This project is still evolving and has many areas that can be improved.
+If you find unreasonable behavior or UX issues during use, please take a screenshot and open an issue.
