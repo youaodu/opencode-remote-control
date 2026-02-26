@@ -361,6 +361,7 @@ export function ChatScreen({ controller, navigation }: Props) {
               <Markdown style={markdownStyles}>{m.content || (m.streaming ? '...' : '')}</Markdown>
             </View>
           ))}
+
         </ScrollView>
 
         {visibleQuestions.length ? (

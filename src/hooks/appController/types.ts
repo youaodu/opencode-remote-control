@@ -1,0 +1,50 @@
+import type { I18nKey, Locale } from '../../../i18n';
+import type { ConnectionState, Endpoint, Message, PermissionReply, PermissionRequest, QuestionRequest, StreamEventLog } from '../../types/chat';
+
+export type SelectedImage = {
+  uri: string;
+  mime: string;
+  filename: string;
+  dataUrl: string;
+};
+
+export type AppController = {
+  locale: Locale;
+  t: (key: I18nKey) => string;
+  endpoints: Endpoint[];
+  activeEndpoint: Endpoint | null;
+  sessionId: string;
+  activeDirectory: string;
+  input: string;
+  selectedImage: SelectedImage | null;
+  messages: Message[];
+  eventLogs: StreamEventLog[];
+  pendingPermissions: PermissionRequest[];
+  pendingQuestions: QuestionRequest[];
+  isStreaming: boolean;
+  statusText: string;
+  canSend: boolean;
+  endpointModalVisible: boolean;
+  endpointEditId: string | null;
+  endpointNameInput: string;
+  gatewayInput: string;
+  gatewayError: string;
+  setInput: (text: string) => void;
+  setSelectedImage: (image: SelectedImage | null) => void;
+  setEndpointNameInput: (text: string) => void;
+  setGatewayInput: (text: string) => void;
+  setActiveDirectory: (directory: string) => void;
+  clearEventLogs: () => void;
+  switchLocale: (nextLocale: Locale) => Promise<void>;
+  enterEndpoint: (endpoint: Endpoint, options?: { skipStoredSession?: boolean }) => Promise<void>;
+  leaveEndpoint: () => void;
+  sendMessage: () => void;
+  stopStreaming: () => Promise<void>;
+  replyPermissionRequest: (requestId: string, reply: PermissionReply, message?: string) => Promise<boolean>;
+  replyQuestionRequest: (requestId: string, answers: string[][]) => Promise<boolean>;
+  rejectQuestionRequest: (requestId: string) => Promise<boolean>;
+  openAddEndpointModal: () => void;
+  openEditEndpointModal: (endpoint: Endpoint) => void;
+  closeEndpointModal: () => void;
+  saveEndpoint: () => Promise<void>;
+};

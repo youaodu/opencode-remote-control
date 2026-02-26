@@ -10,6 +10,14 @@ export type Message = {
   streaming?: boolean;
 };
 
+export type StreamEventLog = {
+  id: string;
+  type: string;
+  summary: string;
+  detail: string;
+  timestamp: number;
+};
+
 export type PermissionReply = 'once' | 'always' | 'reject';
 
 export type PermissionRequestStatus = 'pending' | 'submitting' | 'error';

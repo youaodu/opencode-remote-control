@@ -91,7 +91,9 @@ export type I18nKey =
   | 'toolReadPathLabel'
   | 'imageOnlyMessage'
   | 'imagePermissionDenied'
-  | 'imageReadFailed';
+  | 'imageReadFailed'
+  | 'eventLogTitle'
+  | 'eventLogClear';
 
 export const translations: Record<Locale, Record<I18nKey, string>> = {
   en: {
@@ -186,6 +188,8 @@ export const translations: Record<Locale, Record<I18nKey, string>> = {
     imageOnlyMessage: '[Image]',
     imagePermissionDenied: 'Photo library permission is required to pick images.',
     imageReadFailed: 'Failed to read selected image. Please try another one.',
+    eventLogTitle: 'Event stream',
+    eventLogClear: 'Clear logs',
   },
   zh: {
     welcome: '移动端已就绪。请输入消息并发送到 OpenCode 网关。',
@@ -279,6 +283,8 @@ export const translations: Record<Locale, Record<I18nKey, string>> = {
     imageOnlyMessage: '[图片]',
     imagePermissionDenied: '需要相册权限才能选择图片。',
     imageReadFailed: '读取所选图片失败，请换一张再试。',
+    eventLogTitle: '事件流',
+    eventLogClear: '清空日志',
   },
 };
 
